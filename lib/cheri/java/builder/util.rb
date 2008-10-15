@@ -159,12 +159,13 @@ class << self
     if (info = @info[key = [java_class,method_name]])
       return info
     end
-    java_class.java_instance_methods.each do |m|
+   
+    java_class.methods.each do |m|
       if m.name.match(/add(\w+)Listener/) &&
-         m.argument_types.length == 1 &&
-         m.argument_types[0].name.match(/([\w|.]+)Listener/)
-        clazz = m.argument_types[0]
-        methods = clazz.java_instance_methods
+        m.parameter_types.length == 1 &&
+        m.parameter_types[0].name.match(/([\w|.]+)Listener/)
+        clazz = m.parameter_types[0]
+        methods = clazz.methods
         methods.each do |im|
           if im.name == method_name
             info = @info[key] =  ListenerInfo.new(CJava.get_class(clazz.name),methods,m.name)

@@ -246,10 +246,10 @@ Eq = '='.freeze
 Aliases = {:on_click => 'actionPerformed'.freeze}
 #:startdoc:
   def self.consume(ctx,bld,sym,*args,&block)
-    return false,nil unless (obj = bld.object).respond_to?(:java_class) &&
+    return false,nil unless (obj = bld.object).respond_to?(:get_class) &&
       ((method_name = Aliases[sym]) || (s = sym.to_s).rindex(On,0))
     method_name ||= Util.lcc(s[3,s.length])
-    unless (info = Interfaces.get_listener_info(obj.java_class,method_name))
+    unless (info = Interfaces.get_listener_info(obj.get_class,method_name))
       raise NameError,"no Java interface found matching event handler name: #{sym}"
     end
     raise ArgumentError,"missing block for event handler: #{sym}" unless block

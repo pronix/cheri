@@ -74,8 +74,8 @@ class << self
     
   # a bit expensive, but only used by cherify/cheri_yield
   def swing?(obj)
-    obj.respond_to?(:java_class) &&
-      (obj.java_class.name.rindex(SwingPkg,0) ||
+    obj.respond_to?(:get_class) &&
+      (obj.get_class.name.rindex(SwingPkg,0) ||
        !(obj.class.ancestors & SwingTypes).empty?)
   end
 end #self
