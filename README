@@ -1,0 +1,462 @@
+= Cheri -- A Builder Framework
+
+Cheri is a framework for creating builder applications (those that create
+hierarchical, tree-like, structures).  It includes a number of builders
+based on the framework, as well as a builder-builder tool for easily creating
+simple builders.  Cheri also comes with a demo application, Cheri::JRuby::Explorer,
+that is built using two of the supplied builders (Cheri::Swing and Cheri::Html).
+
+This version (0.0.7) is an early beta release. Some features are still not fully
+developed (though we're getting close). So do expect some bugs, especially in
+Cheri::JRuby::Explorer (CJX), which is very much a work in progress.  I note some
+known problems in the CJX section below.
+
+Documentation will be forthcoming over the coming days, so watch the Cheri pages
+at RubyForge for updates:
+
+  http://cheri.rubyforge.org/
+  http://rubyforge.org/projects/cheri
+  
+
+== Quick Start
+
+Cheri builders are mixin modules; to use one, you include it in a class. The builder's
+functionality is available to instances of that class, and any subclasses (unless the
+including class is Object — inclusion in Object / at the top level is supported, but
+discouraged; inheritance is disabled in that case).
+
+  require 'rubygems'
+  require 'cheri/swing'
+  ...
+  include Cheri::Swing
+  
+All Cheri builders implement a +cheri+ method (the _proxy_ method), which plays two roles,
+depending on how it's called. When called with a block, the cheri method enables Cheri
+builder syntax within its scope for all included builders. When called without a block,
+it returns a CheriProxy object that can act as a receiver for builder methods, for any
+included builder.
+
+  @frame = cheri.frame('Hello!') #=> JFrame (for Cheri::Swing)
+
+  cheri {
+    @frame = frame('Hello!')  
+  }
+
+The +cheri+ method is also used to set global Cheri options. Currently only one
+global option, +alias+, is defined:
+
+  cheri[:alias=>[:cbox,:check_box,:tnode,:default_mutable_tree_node]]
+  
+  cheri.cbox  #=> JCheckBox (Cheri::Swing)
+  cheri.tnode #=> DefaultMutableTreeNode (Cheri::Swing)
+  
+Each built-in Cheri builder also supplies its own proxy method (in addition to the +cheri+
+method): +swing+ for Cheri::Swing (and also +awt+, since Cheri::Swing includes Cheri::AWT),
++html+ for Cheri::Html, and +xml+ for Cheri::Xml. These methods play the same dual
+scoping/proxy roles as the +cheri+ method, but apply only to their respective builders.
+(Each also provides additional functionality; see the sections on individual builders for details.)
+The builder-specific proxy methods also serve to disambiguate overloaded builder method names:
+
+  swing.frame #=> javax.swing.JFrame
+  awt.frame   #=> java.awt.Frame
+  html.frame  #=> HTML frame (Cheri::Html::EmptyElem)
+
+=== Cheri::Swing
+
+To include:
+
+  require 'rubygems'
+  require 'cheri/swing'
+  ...
+  include Cheri::Swing
+
+Note that inclusion at the top level is not recommended.
+
+Options:
+
+  swing[:auto]
+  swing[:auto=>true] #=> Enables auto mode (no swing/cheri block required)
+  
+Cheri::Swing (which includes Cheri::AWT) includes methods (Ruby-cased class names)
+for all javax.swing, javax.swing.border and java.awt classes, plus many in javax.swing.table,
+javax.swing.tree, java.awt.image and java.awt.geom.  You can extend Cheri::Swing with other
+classes/packages (including 3rd party, or your own!) using the Cheri builder-builder's
++build_package+ method.
+
+Cheri::Swing (and any other builder based on Cheri::Java) also provides easy-to-use
+on_xxx methods to implement event listeners. Any event listener supported by a class
+(through an addXxxListener method) can be accessed from Cheri::Swing using an on_xxx method
+(where xxx is the Ruby-cased event-method name).  Because it is so widely used in Swing,
+the ActionListener#actionPerformed event method is aliased as on_click:
+
+  @frame = swing.frame('Hello') {
+    size 500,500
+    flow_layout
+    on_window_closing {|event| @frame.dispose}
+    button('Hit me') {
+      on_click { puts 'button clicked' }
+    }
+  }
+  
+The +cherify+ and +cheri_yield+ methods can be used to incorporate objects created
+outside the Cheri::Swing framework (+cherify+), or to re-introduce objects created
+earlier within the framework (+cheri_yield+):
+
+  class MyButton < javax.swing.JButton
+  ...
+  end
+  ...
+  a_button = MyButton.new
+  ...
+  @frame = swing.frame('Hello') {
+    size 500,500
+    flow_layout
+    cherify(a_button) {
+      on_click { puts 'button clicked' }
+    }  
+  }
+  
+  @frame = swing.frame('Hello') {
+    menu_bar {
+      @file_menu = menu('File') {
+        menu_item('Exit') {on_click {@frame.dispose } }
+      }	
+    }  
+  }
+  # => add a new item later:
+  cheri_yield(@file_menu) {
+    menu_item('Open...') {
+      on_click { ... }
+    }
+  }
+  
+The Cheri builder-builder can be used to extend Cheri::Swing in a couple of ways.
+Individual classes can be included using the +build+ statement, while entire
+packages can be included using the +build_package+ statement. Note that you may
+need to supply connection logic if the incorporated classes use methods other
+than +add+ to connect child objects to parent objects;  see file
+/lib/cheri/builder/swing/connecter.rb for many examples.
+
+  // Java:
+  package my.pkg;
+  public class MyParent extends javax.swing.JComponent {
+    ...
+    public void addChild(MyChild child) {
+      ...
+    }  
+  }
+  ...
+  public class MyChild {
+  ...
+  }
+  
+  # JRuby:
+  require 'cheri/swing'
+  ...
+  include Cheri::Swing
+  ...
+  # easy-to-reference names; could use include_package instead
+  MyParent = Java::my.pkg.MyParent
+  MyChild = Java::my.pkg.MyChild
+  
+  # example specifying each class; 'custom' names may be specified
+  MyBuilder = Cheri::Builder.new_builder do
+    extend_builder Cheri::Swing
+    build MyParent,:pappy
+    build MyChild,:kiddo
+    type MyParent do
+      connect MyChild,:addChild
+    end
+  end
+  
+  include MyBuilder
+  @frame = swing.frame('My test') {
+    ...
+    panel {
+      pappy {
+        kiddo { ... }
+      }
+    }  
+  }
+  
+  # example specifying package; default naming
+  MyBuilder = Cheri::Builder.new_builder do
+    extend_builder Cheri::Swing
+    build_package 'my.package'
+    type MyParent do
+      connect MyChild,:addChild
+    end
+  end
+  
+  include MyBuilder
+  @frame = swing.frame('My test') {
+    ...
+    panel {
+      my_parent {
+        my_child { ... }
+      }
+    }  
+  }
+  
+You can also use the builder-builder just to add conection logic to Cheri::Swing,
+as not every possible connection type is defined.
+
+See the Cheri::JRuby::Explorer (CJX) code (under lib/cheri/jruby/explorer) for
+extensive examples of Cheri::Swing usage.
+
+=== Cheri::Xml
+
+To include:
+  
+  require 'rubygems'
+  require 'cheri/xml'
+  ...
+  include Cheri::Xml
+
+Note that inclusion at the top level is not recommended.
+
+Options:
+
+  xml[:any]
+  xml[:any=>true] #=> Any tag name inside xml {} will be accepted
+  
+  xml[:accept=>[:aaa,:bbb,:nnn]] #=> only specified tag names accepted
+  (see builder-builder example below for alternative approach)
+  
+  xml[:format]
+  xml[:format=>true] #=> output formatted with line-feeds only
+  
+  xml[:indent] #=> output indented by 2 spaces per level
+  xml[:indent=>nnn] #=> output indented by nnn spaces per level
+  
+  xml[:margin=>nnn] #=> output indented by margin (in addition to :indent)
+  
+  xml[:esc]
+  xml[:esc=>true] #=> output will be escaped (off by default for performance)
+  
+  xml[:ns=>:xxx] #=> declare xxx as a namespace prefix
+  xml[:ns=>[:xxx,:yyy,:zzz...]] #=> declare xxx,yyy,zzz as namespace prefixes
+  
+  xml[:alias=>[:alias1,:name1,:alias2,:name2...] #=> declare tag aliases
+  
+  xml[:attr=>[:alias1,:attr1...]] #=> declare attribute aliases
+  
+Options specified using xml[opts] apply to all threads for an instance.
+Options specified using xml(opts) apply only to the current thread/scope:
+
+  # example
+  xml[:any=>true,:indent=>3,:esc=>false]
+  @out = xml {
+  	# nothing escaped at this level
+    aaa{
+      bbb {
+        xml(:esc=>true) {
+          # everything escaped in this scope
+          ddd { ... }
+          eee { ... }
+  }}}}
+
+The result of an +xml+ block will be one of several types of object, depending
+on the tags used and how they are invoked.  The result object can be coerced to a String,
+directly by calling its #to_s method, or indirectly by using << to append it to a
+String or IO stream.  The #to_s method also takes an optional String/stream parameter;
+for streams, this is the most efficient way to render the XML.
+
+  # example
+  xml[:any,:indent]
+  @result = xml{
+    aaa(:an_attr='a value',:another=>'value 2') {
+      bbb { ccc }
+    }
+  }
+  puts @result #=> XML
+  @result.to_s  #=> XML
+  a_string << @result #=> appends XML
+  a_stream << @result #=> appends XML
+  @result.to_s(a_string) #=> appends XML more efficiently
+  @result.to_s(a_stream) #=> appends XML more efficiently
+
+  # result:
+  <?xml version="1.0" encoding="UTF-8"?>
+  <aaa another="value 2" an_attr="a value">
+    <bbb>
+      <ccc />
+    </bbb>
+  </aaa>
+  
+To omit the XML declaration, use +xml+ as the receiver for the initial element:
+
+  xml.aaa{bbb}
+  # result
+  <aaa>
+    <bbb />
+  </aaa>        
+
+Alias element names that are lengthy, or can't be used directly in Ruby:
+
+  xml[:alias=>[:cls,:class]]
+  xml.aaa{cls}
+  # result
+  <aaa>
+    <class />
+  </aaa>
+  
+Declare namespace prefixes, and apply them directly (using myns.tag or myns::tag), or
+apply them to all elements in a scope:
+
+  xml[:alias=>[:env,:Envelope,:hdr,:Header,:body,:Body]]
+  xml[:ns=>:soap]
+  xml { soap {
+   env(:xxx=>'yyy') {
+     hdr
+     body
+  }}}
+
+  # result
+  <?xml version="1.0" encoding="UTF-8"?>
+  <soap:Envelope xxx="yyy">
+    <soap:Header />
+    <soap:Body />
+  </soap:Envelope>
+
+Use no_ns to turn off a namespace, or specify a different namespace:
+
+  xml[:alias=>[:env,:Envelope,:hdr,:Header,:body,:Body]]
+  xml[:ns=>[:soap,:xx]]
+  xml {
+    aaa {
+    soap { env {
+    hdr
+    body {
+      no_ns {
+        bbb
+        xx::ccc
+        ddd
+        xx {eee; fff}
+  }}}}}}
+
+  # result
+  <?xml version="1.0" encoding="UTF-8"?>
+  <aaa>
+    <soap:Envelope>
+      <soap:Header />
+      <soap:Body>
+        <bbb />
+        <xx:ccc />
+        <ddd />
+        <xx:eee />
+        <xx:fff />
+      </soap:Body>
+    </soap:Envelope>
+  </aaa>
+  
+Use the Cheri builder-builder to define more explicit element relationships:
+
+  require 'cheri/xml'
+  
+  my_content_elems = [:aaa,:bbb,:ccc]
+  my_empty_elems = [:xxx,:yyy]
+  
+  MyBuilder = Cheri::Builder.new_builder do
+    extend_builder Cheri::Xml
+    build Cheri::Xml::Elem,my_content_elems
+    build Cheri::Xml::EmptyElem,my_empty_elems
+    symbol :aaa { connect :bbb,:ccc }
+    symbol :bbb { connect :xxx }
+    symbol :ccc { connect :yyy }
+    # raise error to prevent non-connects from silently failing
+    type Cheri::Xml::XmlElement do
+      connect Cheri::Xml::XmlElement do |parent,child|
+        raise TypeError,"can't add #{child.sym} to #{parent.sym}"
+      end
+    end
+  end
+  include Cheri::Xml
+  include MyBuilder
+
+=== Cheri::Html
+
+Documentation TBD
+
+Options:
+
+  html[:format]
+  html[:format=>true] #=> output formatted with line-feeds only
+  
+  html[:indent] #=> output indented by 2 spaces per level
+  html[:indent=>nnn] #=> output indented by nnn spaces per level
+  
+  html[:margin=>nnn] #=> output indented by margin (in addition to :indent)
+  
+  html[:esc]
+  html[:esc=>true] #=> output will be escaped (off by default for performance)
+
+=== Cheri builder-builder
+
+Documentation TBD
+
+== Cheri::JRuby::Explorer (CJX)
+
+CJX is a Swing application written entirely in (J)Ruby using the Cheri::Swing and
+Cheri::Html builders.  It enables you to easily browse classes/modules,
+configuration/environment settings, and, if ObjectSpace is enabled, any objects
+in a JRuby instance.  A small DRb server component can be installed in other JRuby
+instances, enabling you to browse them as well. (Note that I have been trying to get
+the DRb server component working in C/MRI Ruby as well, but have run up against
+threading/IO conflicts. Suggestions welcome!)
+
+The CJX client requires JRuby 1.0.0RC3 or later. To run it (after installing the
+Cheri gem):
+
+  require 'rubygems'
+  require 'cheri/jruby/explorer'
+  
+  Cheri::JRuby::Explorer.run
+  
+Alternatively, you can load and run it in one step:
+
+  require 'rubygems'
+  require 'cheri/cjx'
+
+This will take several seconds to load and start -- performance will be one area
+of ongoing improvement.  Once it loads, it should be fairly clear what to do.
+
+Some known issues:
+
+* Browsing the class hierarchy is very slow right now -- this actually slowed down
+  in the past couple of days when I switched from HTML to straight Swing layout, the
+  opposite of what I expected to happen.
+    
+* There are lots of layout issues; neither HTML (JEditorPane) nor BoxLayout provide 
+  exactly what I'm looking for. Will probably have to bite the bullet and go to
+  GridBagLayout.  Ugh.
+    
+* Global variables are currently shown, um, globally, when many of them should be shown
+  per thread.  This will be fixed in a later version, which will include a Thread section
+  with other goodies as well (thread-local vars, status, etc.).
+  
+To install the CJX DRb server component in an instance (assuming the Cheri gem is
+installed):
+
+  require 'rubygems'
+  require 'cheri/explorer'
+  
+  Cheri::Explorer.start nnnn #=> where nnnn is a port number
+  
+Note that for the server, you require 'cheri/explorer', _not_ 'cheri/jruby/explorer'.
+Also note that the above actually _does_ work in C/MRI Ruby, but requests to the
+server then hang in CJX, unless you join the thread:
+
+  Cheri::Explorer.thread.join
+  
+After that, you can browse just fine in CJX, but you can't do anything more in the
+C-Ruby instance, so it's kind of pointless. Again, if anyone with some DRb experience
+(of which I have none) can offer any suggestions, I'd appreciate it.
+
+== The Rest
+
+Please visit the Cheri site for more documentation, I'll be continually adding to it
+in the coming days.
+
+Bill Dortch (cheri _dot_ project _aaat_ gmail _dot_ com)
+19 June 2007

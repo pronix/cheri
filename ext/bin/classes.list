@@ -1,0 +1,12 @@
+CheriService.class
+org\cheri\Cheri$CheriVersionException.class
+org\cheri\Cheri.class
+org\cheri\RuntimeResources.class
+org\cheri\compat\JRubyVersionAdapter.class
+org\cheri\compat\impl\JRuby_1_0_0_Adapter.class
+org\cheri\compat\impl\JRuby_1_0_2_Adapter.class
+org\cheri\compat\impl\JRuby_1_1_0_Adapter.class
+org\cheri\swing\layout\EmptyCell.class
+org\cheri\swing\layout\GridRow$GridCell.class
+org\cheri\swing\layout\GridRow.class
+org\cheri\swing\layout\GridTable.class

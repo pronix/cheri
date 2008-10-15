@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>Cheri-0.0.9-lib</name>
+	<comment></comment>
+	<projects>
+		<project>JRuby-trunk</project>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>org.rubypeople.rdt.core.rubybuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>org.rubypeople.rdt.core.rubynature</nature>
+	</natures>
+</projectDescription>
